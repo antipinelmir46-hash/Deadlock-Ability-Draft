@@ -259,6 +259,7 @@ public sealed class DraftClientSession
     public string PlayerId { get; init; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public bool IsHost { get; set; }
+    public bool IsHostManaged { get; set; }
     public DeadlockTeam Team { get; set; } = DeadlockTeam.HiddenKing;
     public bool IsReady { get; set; } = true;
     public bool IsConnected { get; set; } = true;
