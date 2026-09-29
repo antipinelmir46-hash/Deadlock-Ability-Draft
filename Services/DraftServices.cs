@@ -654,6 +654,30 @@ public sealed class DraftRoomService(
         }
     }
 
+    public JoinRoomResult AddHostManagedPlayer(string code, string hostPlayerId, string playerName, DeadlockTeam team)
+    {
+        var room = GetRequiredRoom(code);
+        JoinRoomResult result;
+        lock (room)
+        {
+            EnsureHost(room, hostPlayerId);
+            if (room.Status != DraftRoomStatus.Lobby)
+            {
+                throw new InvalidOperationException("Host-controlled players can only be added before the draft starts.");
+            }
+
+            if (!IsPlayerTeam(team))
+            {
+                throw new InvalidOperationException("Host-controlled players must join a player team.");
+            }
+
+            result = AddClient(room, playerName, team, isHost: false, isHostManaged: true);
+        }
+
+        Notify(room.Code);
+        return result;
+    }
+
     public void ChangeTeam(string code, string playerId, DeadlockTeam team)
     {
         var room = GetRequiredRoom(code);
@@ -1997,7 +2021,7 @@ public sealed class DraftRoomService(
         }
     }
 
-    private JoinRoomResult AddClient(DraftRoom room, string playerName, DeadlockTeam team, bool isHost)
+    private JoinRoomResult AddClient(DraftRoom room, string playerName, DeadlockTeam team, bool isHost, bool isHostManaged = false)
     {
         if (string.IsNullOrWhiteSpace(playerName))
         {
@@ -2050,8 +2074,10 @@ public sealed class DraftRoomService(
             PlayerId = Guid.NewGuid().ToString("N"),
             DisplayName = normalizedName,
             IsHost = isHost,
+            IsHostManaged = isHostManaged,
+            IsBrowserConnected = !isHostManaged,
             Team = team,
-            IsReady = false,
+            IsReady = isHostManaged,
             LastSeenUtc = DateTime.UtcNow
         };
         room.Clients.Add(client);
@@ -2226,6 +2252,15 @@ public sealed class DraftRoomService(
         if (client.IsHost && slot.IsBot)
         {
             return true;
+        }
+
+        if (client.IsHost && slot.PlayerId is not null)
+        {
+            var slotClient = room.Clients.FirstOrDefault(player => player.PlayerId == slot.PlayerId);
+            if (slotClient?.IsHostManaged == true)
+            {
+                return true;
+            }
         }
 
         return client.IsHost && room.Config.AllowHostOverridePicks;
