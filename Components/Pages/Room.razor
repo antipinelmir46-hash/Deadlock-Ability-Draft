@@ -176,6 +176,22 @@ else
                     @if (IsHost)
                     {
                         <div class="host-settings">
+                            <h3>Local players</h3>
+                            <p class="message">Add players that you control from this browser. They do not need to join the room themselves.</p>
+                            <label>
+                                <span>Player name</span>
+                                <input @bind="HostManagedPlayerName" placeholder="Vasya" />
+                            </label>
+                            <label>
+                                <span>Team</span>
+                                <select @bind="HostManagedPlayerTeam">
+                                    <option value="@DeadlockTeam.HiddenKing">The Hidden King</option>
+                                    <option value="@DeadlockTeam.Archmother">The Archmother</option>
+                                </select>
+                            </label>
+                            <button @onclick="AddHostManagedPlayer" disabled="@string.IsNullOrWhiteSpace(HostManagedPlayerName)">Add player</button>
+                        </div>
+                        <div class="host-settings">
                             <h3>Room settings</h3>
                             <label>
                                 <span>Draft mode</span>
@@ -284,6 +300,10 @@ else
                                     <span class="@(IsLocalCurrentTurn ? "own-turn-name" : null)">@CurrentTurnPlayer?.NameOrFallback drafts</span>
                                     <span>@PickKindLabel(CurrentRoom.CurrentTurn?.PickKind ?? DraftPickKind.RegularAbility)</span>
                                 </strong>
+                                @if (IsHostControllingCurrentTurn)
+                                {
+                                    <small>Host control: you are picking for @CurrentTurnPlayer?.NameOrFallback</small>
+                                }
                             }
                         }
                     </div>
@@ -514,6 +534,8 @@ else
     private string CopyMessage = string.Empty;
     private string PresetMessage = string.Empty;
     private DeadlockTeam SelectedLobbyTeam = DeadlockTeam.HiddenKing;
+    private string HostManagedPlayerName = string.Empty;
+    private DeadlockTeam HostManagedPlayerTeam = DeadlockTeam.HiddenKing;
     private DraftMode LobbyDraftMode = DraftMode.FreePick;
     private bool LobbyAllowDuplicates;
     private bool LobbyAllowBots;
@@ -565,6 +587,9 @@ else
                                        !CurrentTurnPlayer.IsDisconnected &&
                                        !string.IsNullOrWhiteSpace(PlayerId) &&
                                        string.Equals(CurrentTurnPlayer.PlayerId, PlayerId, StringComparison.Ordinal);
+    private bool IsHostControllingCurrentTurn => IsHost &&
+                                                 CurrentTurnPlayer?.PlayerId is string currentPlayerId &&
+                                                 CurrentRoom?.Clients.Any(client => client.PlayerId == currentPlayerId && client.IsHostManaged) == true;
     private bool BlindDraftActive => CurrentRoom?.Config.DraftMode == DraftMode.Custom &&
                                      CurrentRoom.Config.BlindDraft &&
                                      CurrentRoom.Status != DraftRoomStatus.Completed;
@@ -813,6 +838,12 @@ else
             {
                 builder.OpenElement(sequence++, "small");
                 builder.AddContent(sequence++, "Host");
+                builder.CloseElement();
+            }
+            if (client.IsHostManaged)
+            {
+                builder.OpenElement(sequence++, "small");
+                builder.AddContent(sequence++, "Host controlled");
                 builder.CloseElement();
             }
             if (IsHost && !client.IsHost)
@@ -1762,6 +1793,16 @@ else
         {
             SetCopyMessage("Copy failed. Select the text manually.");
         }
+    }
+
+    private void AddHostManagedPlayer()
+    {
+        var name = HostManagedPlayerName;
+        Try(() =>
+        {
+            RoomService.AddHostManagedPlayer(Code, PlayerId ?? string.Empty, name, HostManagedPlayerTeam);
+            HostManagedPlayerName = string.Empty;
+        });
     }
 
     private void ChangeTeam() => Try(() => RoomService.ChangeTeam(Code, PlayerId ?? string.Empty, SelectedLobbyTeam));
